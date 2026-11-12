@@ -1,0 +1,56 @@
+# Project Rules
+- Framework: Next.js (App Router) with TypeScript
+- Styling: Tailwind CSS
+- Path alias: `@/*` maps to `./*` (root-level imports, no `src/` directory)
+- Components are organized by page under `components/stock/<page>/` (the tab component + its sub-components). Shared shell in `components/layout/`; shared primitives in `components/shared/`; planned-page stubs in `components/planned/`.
+- No database/ORM (no Prisma); no persistence layer yet
+- No Server Actions directory
+- Strict TypeScript types; no Zod used currently
+
+## lib/ folder structure (numbered by call-stack order, entry → fallback)
+```
+lib/
+├── 0.entry/          get-stock-data.ts      — entry point, called first by API route
+├── 1.api/            yahoo-api.ts           — fetches raw Yahoo data (1st real call)
+├── 2.data/           dividend.ts            — page converters (called by entry)
+│   ├── financials.ts
+│   ├── overview.ts
+│   ├── profitability.ts
+│   └── sensitivity.ts
+├── 3.tools/          fundamentals-tools.ts  — reusable converters (called by data)
+│   └── market-tools.ts
+├── 4.screening/      screening.ts           — business rules (called by data)
+├── 5.utils/          utils.ts               — helpers (called by data & screening)
+├── 6.types/          types.ts               — TypeScript interfaces (StockData, FiscalPeriod, etc.)
+└── 7.mock/           mock-data.ts           — fallback data (used on error)
+```
+
+## Data flow (call order)
+API route (`app/api/stock/[symbol]/route.ts`)
+→ `0.entry/get-stock-data.ts` (`getStockData`)
+→ `1.api/yahoo-api.ts` (`fetchRawStockData`)
+→ `2.data/*.ts` (5 page converters, each owns a slice of `StockData`)
+→ `3.tools/*` (`FundamentalsTools`, `MarketTools`) and `4.screening/screening.ts`
+→ `5.utils/utils.ts` (formatters, CAGR, `isMissing`, `closestPrice`)
+→ `7.mock/mock-data.ts` (fallback only on error)
+
+## Key dependencies
+- `yahoo-finance2` — Yahoo Finance data fetching
+- `recharts` — charting
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — className utilities (`cn()` helper in utils)
+- `tsx` — test runner
+
+## Test command
+`npm run test:data` — runs `scripts/test-calculators.ts` (offline, Yahoo-shaped fixtures, no network)
+
+## Conventions
+- `isMissing()` treats null/undefined/NaN as "no value" (JSON.stringify converts NaN→null)
+- "N-year figure" = N data points (5yr CAGR needs 5 points, growthYears=4)
+- Fiscal years may not end Dec 31; real period-end dates are preserved
+- Current/incomplete calendar year is excluded from annual data
+- Yahoo reports capex/dividends/buybacks as negatives; tools convert to positive
+- `FundamentalsTools.annualPeriods()` is memoized per request via WeakMap
+
+## Living document rule
+- Every time you learn something new about this project (a new convention, dependency, file responsibility, quirk, or pattern), add it to this `.clinerules` file so future sessions don't re-learn it.
